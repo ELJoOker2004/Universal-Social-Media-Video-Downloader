@@ -75,6 +75,15 @@
   const tracked = new Map(); // video element → { btn, id }
   let idCounter = 0;
 
+  const DEFAULT_BUTTON_TOP_INSET = 8;
+  // Facebook places the Reels sound control in the video's top-right corner.
+  // Keep the download button in the same corner, but on the next control row.
+  const REELS_BUTTON_TOP_INSET = 64;
+
+  function isReelsView() {
+    return /\/(?:reel|reels)(?:\/|$)/i.test(window.location.pathname);
+  }
+
   // ── Create download button (fixed position, in overlay) ────
   function createBtn(video) {
     const wrap = document.createElement('div');
@@ -118,7 +127,10 @@
       const visible = r.width > 120 && r.height > 80 &&
                       r.bottom > 0 && r.top < window.innerHeight;
       if (visible) {
-        state.btn.style.top = (r.top + 8) + 'px';
+        const topInset = isReelsView()
+          ? REELS_BUTTON_TOP_INSET
+          : DEFAULT_BUTTON_TOP_INSET;
+        state.btn.style.top = (r.top + topInset) + 'px';
         state.btn.style.left = (r.right - 54) + 'px';
         state.btn.style.display = '';
       } else {
