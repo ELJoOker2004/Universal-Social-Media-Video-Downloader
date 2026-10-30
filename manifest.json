@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "FB, X & Instagram Video Downloader",
-  "version": "1.2.0",
-  "description": "Download Facebook, X and Instagram videos with one click",
+  "name": "Universal Social Media Video Downloader",
+  "version": "1.2.1",
+  "description": "Download videos from Facebook, X, and Instagram with one click",
   "permissions": [
     "downloads",
     "webRequest"

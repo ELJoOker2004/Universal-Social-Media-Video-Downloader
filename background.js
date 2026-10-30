@@ -1,4 +1,4 @@
-/* ===== FB, X & Instagram Video Downloader — Background Service Worker ===== */
+/* ===== Universal Social Media Video Downloader — Background Service Worker ===== */
 
 // Per-tab store of intercepted CDN video URLs
 const videoUrls = new Map();

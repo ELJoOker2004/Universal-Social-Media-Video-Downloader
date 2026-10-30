@@ -1,4 +1,4 @@
-# FB, X & Instagram Video Downloader
+# Universal Social Media Video Downloader
 
 A Chrome extension that adds a download button to videos on Facebook, X (including legacy `twitter.com` links), and Instagram.
 
