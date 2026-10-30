@@ -29,6 +29,7 @@
 
 /* ── Button ────────────────────────────────────── */
 .fbdl-btn {
+  appearance: none !important;
   width: 42px !important;
   height: 42px !important;
   border-radius: 50% !important;
@@ -46,6 +47,14 @@
   padding: 0 !important;
   margin: 0 !important;
   pointer-events: all !important;
+}
+#fbdl-overlay[data-platform="x"] .fbdl-btn:hover {
+  background: rgba(29, 155, 240, 0.92) !important;
+  box-shadow: 0 4px 16px rgba(29, 155, 240, 0.55) !important;
+}
+#fbdl-overlay[data-platform="instagram"] .fbdl-btn:hover {
+  background: rgba(225, 48, 108, 0.92) !important;
+  box-shadow: 0 4px 16px rgba(225, 48, 108, 0.55) !important;
 }
 .fbdl-btn:hover {
   background: rgba(24, 119, 242, 0.92) !important;

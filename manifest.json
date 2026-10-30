@@ -1,15 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "FB Video Downloader",
-  "version": "1.0.0",
-  "description": "Download any Facebook video with one click — highest quality",
+  "name": "FB, X & Instagram Video Downloader",
+  "version": "1.2.0",
+  "description": "Download Facebook, X and Instagram videos with one click",
   "permissions": [
     "downloads",
     "webRequest"
   ],
   "host_permissions": [
     "*://*.facebook.com/*",
-    "*://*.fbcdn.net/*"
+    "*://*.fbcdn.net/*",
+    "https://x.com/*",
+    "https://*.x.com/*",
+    "https://twitter.com/*",
+    "https://*.twitter.com/*",
+    "https://instagram.com/*",
+    "https://*.instagram.com/*",
+    "https://video.twimg.com/*",
+    "https://video-s.twimg.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -24,6 +32,30 @@
     {
       "matches": ["*://*.facebook.com/*"],
       "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://x.com/*", "https://*.x.com/*", "https://twitter.com/*", "https://*.twitter.com/*"],
+      "js": ["x-inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://x.com/*", "https://*.x.com/*", "https://twitter.com/*", "https://*.twitter.com/*"],
+      "js": ["x-content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://instagram.com/*", "https://*.instagram.com/*"],
+      "js": ["ig-inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://instagram.com/*", "https://*.instagram.com/*"],
+      "js": ["ig-content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
