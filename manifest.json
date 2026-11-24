@@ -1,11 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Universal Social Media Video Downloader",
-  "version": "1.2.1",
-  "description": "Download videos from Facebook, X, and Instagram with one click",
+  "version": "1.4.1",
+  "description": "Download videos from Facebook, X, Instagram, YouTube, and TikTok, plus TikTok sound",
   "permissions": [
     "downloads",
-    "webRequest"
+    "webRequest",
+    "nativeMessaging",
+    "storage"
   ],
   "host_permissions": [
     "*://*.facebook.com/*",
@@ -17,10 +19,22 @@
     "https://instagram.com/*",
     "https://*.instagram.com/*",
     "https://video.twimg.com/*",
-    "https://video-s.twimg.com/*"
+    "https://video-s.twimg.com/*",
+    "https://youtube.com/*",
+    "https://*.youtube.com/*",
+    "https://tiktok.com/*",
+    "https://*.tiktok.com/*"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Video downloads",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
   },
   "content_scripts": [
     {
@@ -56,6 +70,18 @@
     {
       "matches": ["https://instagram.com/*", "https://*.instagram.com/*"],
       "js": ["ig-content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://youtube.com/*", "https://*.youtube.com/*"],
+      "js": ["yt-content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://tiktok.com/*", "https://*.tiktok.com/*"],
+      "js": ["tt-content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
