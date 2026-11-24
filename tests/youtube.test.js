@@ -20,7 +20,7 @@ function port(name, url) {
   const onDisconnect = event();
   const sent = [];
   return {
-    name, sender: url ? { url, tab: { id: 7 } } : undefined,
+    name, sender: url ? { url, frameId: 0, tab: { id: 7 } } : undefined,
     onMessage, onDisconnect, sent, disconnected: false,
     postMessage(message) { sent.push(message); },
     disconnect() { this.disconnected = true; onDisconnect.emit(); },
@@ -33,9 +33,13 @@ function background(initialJobs = []) {
   const onRemoved = event();
   const nativePorts = [];
   const storage = { youtubeJobs: initialJobs };
+  const tab = { id: 7, url: 'https://www.youtube.com/watch?v=abcdefghijk' };
   const chrome = {
     webRequest: { onBeforeRequest: event() },
-    tabs: { onRemoved, sendMessage: async () => {} },
+    tabs: {
+      onRemoved, sendMessage: async () => {},
+      async get(id) { assert.equal(id, tab.id); return { ...tab }; },
+    },
     action: {
       setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {}, setTitle: async () => {},
     },
@@ -54,10 +58,10 @@ function background(initialJobs = []) {
     },
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'background.js'), 'utf8'), { chrome, URL, Date, console });
-  function send(message, url = 'https://www.youtube.com/watch?v=abcdefghijk') {
-    return new Promise((resolve) => onMessage.emit(message, { url, tab: { id: 7 } }, resolve));
+  function send(message, url = tab.url) {
+    return new Promise((resolve) => onMessage.emit(message, { url, frameId: 0, tab: { ...tab } }, resolve));
   }
-  return { chrome, onConnect, onRemoved, nativePorts, storage, send };
+  return { chrome, onConnect, onRemoved, nativePorts, storage, send, tab };
 }
 
 test('YouTube requests are bound to the current watch or Shorts video', async () => {
@@ -72,10 +76,50 @@ test('YouTube requests are bound to the current watch or Shorts video', async ()
   }
   assert.equal(app.nativePorts.length, 0);
 
+  app.tab.url = 'https://www.youtube.com/shorts/abcdefghijk';
   const response = await app.send({ action: 'startYoutubeDownload', videoId: 'abcdefghijk', format: '136+140', label: '720p MP4 (merged)' },
-    'https://www.youtube.com/shorts/abcdefghijk');
+    app.tab.url);
   assert.equal(response.success, true);
   assert.equal(app.nativePorts[0].sent[0].format, '136+140');
+});
+
+test('YouTube lists formats and downloads the current video after in-tab navigation', async () => {
+  for (const originalUrl of ['https://www.youtube.com/results?search_query=music',
+    'https://www.youtube.com/watch?v=previous123']) {
+    const app = background();
+    const client = port('fbdl-youtube', originalUrl);
+    app.onConnect.emit(client);
+    client.onMessage.emit({ action: 'formats', videoId: 'abcdefghijk' });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(app.nativePorts.length, 1, JSON.stringify(client.sent));
+    assert.equal(app.nativePorts[0].sent[0].videoId, 'abcdefghijk');
+    app.nativePorts[0].onMessage.emit({ type: 'formats', video: [{ format: '18' }] });
+    assert.equal(client.sent[0].video[0].format, '18');
+
+    const response = await app.send({ action: 'startYoutubeDownload', videoId: 'abcdefghijk', format: '18' }, originalUrl);
+    assert.equal(response.success, true);
+    assert.equal(app.nativePorts[1].sent[0].videoId, 'abcdefghijk');
+  }
+});
+
+test('YouTube ignores requests from a previous video, a child frame or a different site', async () => {
+  for (const [senderUrl, currentUrl, frameId] of [
+    ['https://www.youtube.com/watch?v=abcdefghijk', 'https://www.youtube.com/watch?v=previous123', 0],
+    ['https://www.youtube.com/watch?v=abcdefghijk', 'https://www.youtube.com/', 0],
+    ['https://www.youtube.com/watch?v=abcdefghijk', 'https://example.org/', 0],
+    ['https://example.org/', 'https://www.youtube.com/watch?v=abcdefghijk', 0],
+    ['https://www.youtube.com/watch?v=abcdefghijk', 'https://www.youtube.com/watch?v=abcdefghijk', 1],
+  ]) {
+    const app = background();
+    app.tab.url = currentUrl;
+    const client = port('fbdl-youtube', senderUrl);
+    client.sender.frameId = frameId;
+    app.onConnect.emit(client);
+    client.onMessage.emit({ action: 'formats', videoId: 'abcdefghijk' });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(app.nativePorts.length, 0);
+    assert.equal(client.sent[0].type, 'error');
+  }
 });
 
 test('closing the source tab does not disconnect an active YouTube download', async () => {

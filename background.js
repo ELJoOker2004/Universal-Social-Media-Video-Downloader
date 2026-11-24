@@ -103,7 +103,7 @@ function finishDownloadJob(job, state, fields = {}) {
 
 async function startDownloadJob(message, sender, platform, legacyPort = null) {
   await downloadReady;
-  const pageId = platform === 'youtube' ? youtubeVideoIdFromPage(sender?.url) : tiktokVideoIdFromPage(sender?.url);
+  const pageId = platform === 'youtube' ? await currentYouTubeVideoId(sender) : tiktokVideoIdFromPage(sender?.url);
   const id = platform === 'youtube' ? pageId : message?.videoId;
   const kind = platform === 'tiktok'
     ? Object.prototype.hasOwnProperty.call(message || {}, 'kind') ? message.kind : 'video'
@@ -231,11 +231,15 @@ function isInstagramMp4(url) {
   } catch (_) { return false; }
 }
 
-function youtubeVideoIdFromPage(url) {
+async function currentYouTubeVideoId(sender) {
+  if (sender?.frameId !== 0 || !Number.isInteger(sender.tab?.id)) return null;
   try {
-    const parsed = new URL(url);
+    // YouTube changes videos in the same document. The content script's sender
+    // URL can still be the search page or the first video it was loaded on.
+    const tab = await chrome.tabs.get(sender.tab.id);
+    const parsed = new URL(tab.url);
     const host = parsed.hostname;
-    if (parsed.protocol !== 'https:' ||
+    if (parsed.protocol !== 'https:' || parsed.origin !== new URL(sender.url).origin ||
         (host !== 'youtube.com' && !host.endsWith('.youtube.com'))) return null;
     const id = parsed.pathname === '/watch'
       ? parsed.searchParams.get('v')
@@ -408,7 +412,6 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 // a tab closing must not disconnect the native host while it writes a file.
 chrome.runtime.onConnect?.addListener((port) => {
   if (port.name !== 'fbdl-youtube') return;
-  const pageVideoId = youtubeVideoIdFromPage(port.sender?.url);
   let nativePort = null;
   let requested = false;
   let finished = false;
@@ -418,11 +421,10 @@ chrome.runtime.onConnect?.addListener((port) => {
     try { port.postMessage(message); } catch (_) {}
   }
 
-  port.onMessage.addListener((message) => {
+  port.onMessage.addListener(async (message) => {
     if (requested) return;
     requested = true;
-    if (!pageVideoId || message?.videoId !== pageVideoId ||
-        !['formats', 'download'].includes(message.action)) {
+    if (!['formats', 'download'].includes(message?.action)) {
       finished = true;
       send({ type: 'error', error: 'Invalid YouTube video or format.' });
       return;
@@ -437,6 +439,13 @@ chrome.runtime.onConnect?.addListener((port) => {
     }
     isFormatRequest = true;
     try {
+      const pageVideoId = await currentYouTubeVideoId(port.sender);
+      if (finished) return;
+      if (!pageVideoId || message.videoId !== pageVideoId) {
+        finished = true;
+        send({ type: 'error', error: 'The video changed. Open the download menu on the current YouTube video.' });
+        return;
+      }
       nativePort = chrome.runtime.connectNative(DOWNLOAD_HOST);
       nativePort.onMessage.addListener((response) => {
         if (finished) return;
@@ -460,6 +469,7 @@ chrome.runtime.onConnect?.addListener((port) => {
   });
 
   port.onDisconnect.addListener(() => {
+    finished = true;
     if (isFormatRequest) {
       try { nativePort?.disconnect(); } catch (_) {}
     }

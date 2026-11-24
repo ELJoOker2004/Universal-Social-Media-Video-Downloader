@@ -21,8 +21,7 @@
 
   let video = null;
   let menu = null;
-  let pageUrl = location.href;
-  let busy = false;
+  let pageVideoId = videoId();
   let activeJobId = null;
 
   function videoId() {
@@ -54,7 +53,6 @@
   }
 
   function closeMenu() {
-    if (busy) return;
     menu?.remove();
     menu = null;
     button.setAttribute('aria-expanded', 'false');
@@ -190,32 +188,30 @@
       item.addEventListener('click', async (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (busy) return;
-        busy = true;
+        if (item.disabled || menu !== parent || videoId() !== currentId) return;
         parent.querySelectorAll('.fbdl-yt-choice').forEach((button) => { button.disabled = true; });
         setStatus(`Preparing ${choice.label}...`);
         const result = await sendRequest({
           action: 'startYoutubeDownload', videoId: currentId, format: choice.format, label: choice.label,
         }, 15000);
-        busy = false;
+        if (menu !== parent || videoId() !== currentId) return;
         parent.querySelectorAll('.fbdl-yt-choice').forEach((button) => { button.disabled = false; });
         if (result.success) {
           activeJobId = result.jobId;
           const jobs = await getJobs();
+          if (menu !== parent || videoId() !== currentId) return;
           const job = jobs.find((entry) => entry.id === result.jobId);
           if (job) renderJob(job);
           else setStatus(`Started ${choice.label}. You can close this tab while the browser stays open.`);
         } else {
           setStatus(result.error || 'Could not start the download.', true);
         }
-        if (videoId() !== currentId) closeMenu();
       });
       parent.appendChild(item);
     }
   }
 
   async function openMenu() {
-    if (busy) return;
     const currentId = videoId();
     if (!currentId || !video) return;
     closeMenu();
@@ -268,7 +264,6 @@
   button.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (busy) return;
     if (menu) closeMenu();
     else openMenu();
   });
@@ -283,8 +278,9 @@
   });
 
   function scan() {
-    if (pageUrl !== location.href) {
-      pageUrl = location.href;
+    const currentId = videoId();
+    if (pageVideoId !== currentId) {
+      pageVideoId = currentId;
       closeMenu();
       activeJobId = null;
     }

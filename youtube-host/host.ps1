@@ -185,10 +185,20 @@ try {
     }
     $previousErrorAction = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    try { $metadata = & $ytDlp --ignore-config --no-playlist --no-warnings --quiet -J $url 2>$null }
+    try { $metadata = & $ytDlp --ignore-config --no-playlist --no-warnings --quiet -J $url 2>&1 }
     finally { $ErrorActionPreference = $previousErrorAction }
-    if ($LASTEXITCODE -ne 0 -or !$metadata) { throw "yt-dlp could not read this $platform video. Update yt-dlp or try another video." }
-    $info = ($metadata -join "`n") | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or !$metadata) {
+        if ($platform -eq 'youtube') {
+            $reason = $metadata -join ' '
+            if ($reason -match 'sign[ -]?in') {
+                throw 'YouTube requested sign-in for this video. The helper can download videos YouTube serves without sign-in.'
+            }
+            if ($reason -match 'video (?:is )?unavailable') { throw 'YouTube reports that this video is unavailable.' }
+        }
+        throw "yt-dlp could not read this $platform video. Update yt-dlp or try another video."
+    }
+    # Windows PowerShell returns redirected native stderr as ErrorRecord objects.
+    $info = (($metadata | Where-Object { $_ -is [string] }) -join "`n") | ConvertFrom-Json
     if ([string]$info.id -ne [string]$request.videoId) { throw 'The site returned a different video.' }
     if ($info.is_live -eq $true) { throw 'Live streams are not supported.' }
 
