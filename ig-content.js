@@ -7,6 +7,10 @@
   const ERROR_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
   const pending = new Map();
   const tracked = new Map();
+  const dialogSelector = 'dialog[open], [role="dialog"], [aria-modal="true"]';
+  const postLinkSelector = 'a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"], a[href*="/tv/"]';
+  const visibilityOptions = { checkVisibilityCSS: true, checkOpacity: true };
+  let dialogs = [];
 
   function validMp4(url) {
     try {
@@ -24,25 +28,57 @@
     return String(url || '').match(/\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]{5,20})(?:[/?#]|$)/)?.[1] || null;
   }
 
-  function visible(video) {
-    const rect = video.getBoundingClientRect();
-    return rect.width > 120 && rect.height > 80 && rect.bottom > 0 &&
-      rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth;
+  function onScreen(rect) {
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight &&
+      rect.right > 0 && rect.left < innerWidth;
   }
 
-  function videoContext(video) {
+  function pageElementAtCenter(rect) {
+    const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
+    const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
+    const hit = document.elementFromPoint(x, y);
+    if (!overlay.contains(hit)) return hit;
+    return document.elementsFromPoint(x, y).find((el) => !overlay.contains(el));
+  }
+
+  function foregroundDialog() {
+    return dialogs.findLast((dialog) => {
+      if (dialog.closest('[inert], [aria-hidden="true"]') || !dialog.checkVisibility(visibilityOptions)) return false;
+      const rect = dialog.getBoundingClientRect();
+      return onScreen(rect) && dialog.contains(pageElementAtCenter(rect));
+    });
+  }
+
+  function visible(video, dialog, rect = video.getBoundingClientRect()) {
+    if ((dialog && !dialog.contains(video)) || rect.width <= 120 || rect.height <= 80 || !onScreen(rect) ||
+        !video.checkVisibility(visibilityOptions) || video.closest('[inert]')) return false;
+    const tile = video.closest(postLinkSelector);
+    if ((tile || video.parentElement)?.closest('[aria-hidden="true"]')) return false;
+
+    // A viewer can cover the search grid without exposing a dialog role.
+    const hit = pageElementAtCenter(rect);
+    if (!hit) return false;
+    if (tile) return tile.contains(hit);
+    for (let layer = hit; layer && !layer.contains(video); layer = layer.parentElement) {
+      if (getComputedStyle(layer).position === 'fixed') return false;
+    }
+    return true;
+  }
+
+  function videoContext(video, foreground) {
     const article = video.closest('article');
-    const dialog = video.closest('[role="dialog"]');
+    const dialog = video.closest(dialogSelector);
     const container = article || dialog;
-    const ownLink = video.closest('a[href*="/reel/"], a[href*="/p/"], a[href*="/tv/"]');
+    const ownLink = video.closest(postLinkSelector);
     const permalink = article?.querySelector('time')?.closest('a');
     let code = shortcode(ownLink?.getAttribute('href')) || shortcode(permalink?.getAttribute('href'));
     if (!code && container) {
-      const codes = new Set([...container.querySelectorAll('a[href*="/p/"], a[href*="/reel/"], a[href*="/tv/"]')]
+      const codes = new Set([...container.querySelectorAll(postLinkSelector)]
         .map((link) => shortcode(link.getAttribute('href'))).filter(Boolean));
       if (codes.size === 1) code = [...codes][0];
     }
-    const videos = container ? [...container.querySelectorAll('video')] : [...document.querySelectorAll('video')].filter(visible);
+    const videos = container ? [...container.querySelectorAll('video')] :
+      [...document.querySelectorAll('video')].filter((candidate) => visible(candidate, foreground));
     const singleVideo = videos.length === 1;
     if (!code && singleVideo && (dialog || !article)) code = shortcode(location.pathname);
     const storyId = location.pathname.match(/^\/stories\/[^/]+\/(\d{5,})(?:\/|$)/)?.[1] || null;
@@ -97,10 +133,11 @@
   }
 
   async function download(video, button) {
-    if (button.disabled) return;
+    const dialog = foregroundDialog();
+    if (button.disabled || !visible(video, dialog)) return;
     button.disabled = true;
     button.classList.add('fbdl-loading');
-    const { code, storyId, singleVideo } = videoContext(video);
+    const { code, storyId, singleVideo } = videoContext(video, dialog);
     let url = await askPage(postersNear(video), code, storyId, singleVideo, video.duration);
     if (!validMp4(url)) url = null;
     if (!url) url = [video.currentSrc, video.src].find(validMp4) || null;
@@ -119,12 +156,12 @@
   document.documentElement.appendChild(overlay);
 
   function scan() {
+    dialogs = [...document.querySelectorAll(dialogSelector)];
     document.querySelectorAll('video').forEach((video) => {
       if (tracked.has(video)) return;
-      const rect = video.getBoundingClientRect();
-      if (rect.width < 100 || rect.height < 60) return;
       const wrap = document.createElement('div');
       wrap.className = 'fbdl-fixed-wrap';
+      wrap.style.display = 'none';
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'fbdl-btn';
@@ -146,6 +183,10 @@
   }
 
   function updatePositions() {
+    const dialog = foregroundDialog();
+    // Native modal dialogs live above everything attached to the document root.
+    const host = dialog?.closest('dialog:modal') || document.documentElement;
+    if (overlay.parentElement !== host) host.appendChild(overlay);
     for (const [video, wrap] of tracked) {
       if (!document.contains(video)) {
         wrap.remove();
@@ -153,7 +194,7 @@
         continue;
       }
       const rect = video.getBoundingClientRect();
-      const inView = visible(video);
+      const inView = visible(video, dialog, rect);
       wrap.style.display = inView ? '' : 'none';
       if (inView) {
         const inset = /^\/(?:reel|reels|stories)\//.test(location.pathname) ? 64 : 8;
@@ -165,7 +206,9 @@
   }
 
   scan();
-  new MutationObserver(scan).observe(document.body || document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(scan).observe(document.body || document.documentElement, {
+    childList: true, subtree: true, attributeFilter: ['role', 'aria-modal', 'open'],
+  });
   setInterval(scan, 2000);
   requestAnimationFrame(updatePositions);
 })();

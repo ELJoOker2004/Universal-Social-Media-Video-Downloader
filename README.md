@@ -83,7 +83,7 @@ On a public TikTok video page or a feed with an identifiable video, use the down
 
 Photo carousels, live streams, private or inaccessible posts, and videos TikTok refuses to serve are not supported. If a player cannot be matched to a post ID, the extension leaves it alone instead of downloading a different video. TikTok changes its site and media access frequently, so an updated `yt-dlp` or extension may be needed.
 
-Run the local checks with `node --test tests/*.test.js`.
+Run the local checks with `node --test tests/*.test.js`. With Python Playwright and its Chromium browser installed, run `python tests/instagram_overlay.py` to check the Instagram search grid and video viewer in an isolated browser profile.
 
 ## Project Structure
 
